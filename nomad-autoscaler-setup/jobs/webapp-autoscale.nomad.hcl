@@ -1,10 +1,37 @@
 # jobs/webapp-autoscale.nomad.hcl
+#
+# APM source is configurable via var files in jobs/apm/.
+# Usage:
+#   nomad job run -var-file=jobs/apm/prometheus.nomad.vars jobs/webapp-autoscale.nomad.hcl
+#   nomad job run -var-file=jobs/apm/influxdb.nomad.vars   jobs/webapp-autoscale.nomad.hcl
+#
+# Or via Makefile:
+#   make deploy-webapp APM=influxdb
+
+variable "apm_source" {
+  type        = string
+  default     = "prometheus"
+  description = "APM plugin to use: prometheus | influxdb | datadog"
+}
+
+variable "apm_query" {
+  type        = string
+  default     = "max_over_time(nomad_client_allocs_cpu_total_percent{task='web'}[1m])"
+  description = "APM query string for the selected source"
+}
+
+variable "scale_target" {
+  type        = number
+  default     = 50
+  description = "Target value for the scaling strategy (e.g. CPU %)"
+}
+
 job "webapp" {
   datacenters = ["dc1"]
   type        = "service"
 
   group "web" {
-    count = 1  # Start with 1 tasks
+    count = 1
 
     scaling {
       enabled = true
@@ -16,13 +43,11 @@ job "webapp" {
         evaluation_interval = "10s"
 
         check "cpu_usage" {
-          source = "prometheus"
-          # Monitor peak CPU usage over 1-minute window
-          # Scales when CPU allocation exceeds target threshold
-          query  = "max_over_time(nomad_client_allocs_cpu_total_percent{task='web'}[1m])"
+          source = var.apm_source
+          query  = var.apm_query
 
           strategy "target-value" {
-            target = 50  # Scale when CPU exceeds 50% of 500 MHz allocation
+            target = var.scale_target
           }
         }
       }
@@ -38,19 +63,15 @@ job "webapp" {
       name     = "webapp"
       port     = "http"
       provider = "consul"
-      
-      tags = [
-        "load-balancer",
-        "http",
-        "web"
-      ]
+
+      tags = ["load-balancer", "http", "web"]
 
       check {
-        type        = "http"
-        path        = "/"
-        interval    = "10s"
-        timeout     = "2s"
-        method      = "GET"
+        type     = "http"
+        path     = "/"
+        interval = "10s"
+        timeout  = "2s"
+        method   = "GET"
       }
 
       check {

@@ -43,8 +43,9 @@ job "webapp" {
         evaluation_interval = "10s"
 
         check "cpu_usage" {
-          source = var.apm_source
-          query  = var.apm_query
+          source       = var.apm_source
+          query        = var.apm_query
+          query_window = "5m"
 
           strategy "target-value" {
             target = var.scale_target

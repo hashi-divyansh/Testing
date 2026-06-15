@@ -1,9 +1,12 @@
 .PHONY: provision terraform-init terraform-apply inventory ansible load-test destroy \
-        deploy-autoscaler deploy-webapp deploy-backend teardown-backend
+        deploy-autoscaler deploy-webapp deploy-backend teardown-backend sync-autoscaler
 
 HEY_FLAGS     ?= -z 5m -c 100 -q 50
 APM           ?= prometheus
-AUTOSCALER_BIN ?= $(HOME)/Desktop/Hashicorp/nomad-autoscaler/pkg/linux_arm64/nomad-autoscaler
+# Local source binary (arm64 for OrbStack VMs). Used by sync-autoscaler to copy to the VM.
+AUTOSCALER_BIN_SRC ?= $(HOME)/Desktop/Hashicorp/nomad-autoscaler/pkg/linux_arm64/nomad-autoscaler
+# Path on client-vm-0 where the binary lives (accessible to Nomad/root).
+AUTOSCALER_BIN ?= /opt/nomad/autoscaler/nomad-autoscaler
 INSTANA_ENDPOINT ?=
 INSTANA_TOKEN    ?=
 
@@ -21,8 +24,21 @@ inventory:
 ansible: inventory
 	cd ansible && ANSIBLE_ROLES_PATH=roles ansible-playbook -i inventory/hosts.yml playbooks/site.yml
 
+# Copy the local autoscaler binary to client-vm-0 (OrbStack VM).
+# The macOS filesystem is not accessible to root inside OrbStack VMs, so the
+# binary must be staged to a VM-local path before deploying the job.
+# Usage: make sync-autoscaler
+#        make sync-autoscaler AUTOSCALER_BIN_SRC=/path/to/custom/binary
+sync-autoscaler:
+	@echo "Copying autoscaler binary to client-vm-0:/opt/nomad/autoscaler/ ..."
+	orb -m client-vm-0 -u root mkdir -p /opt/nomad/autoscaler
+	orb -m client-vm-0 -u root bash -c 'cat > $(AUTOSCALER_BIN)' < $(AUTOSCALER_BIN_SRC)
+	orb -m client-vm-0 -u root chmod +x $(AUTOSCALER_BIN)
+	@echo "Done: $(AUTOSCALER_BIN)"
+
 # Deploy the autoscaler job (exec driver, binary path set by AUTOSCALER_BIN).
-# Override: make deploy-autoscaler AUTOSCALER_BIN=/path/to/nomad-autoscaler
+# Run sync-autoscaler first to stage the binary on client-vm-0.
+# Override: make deploy-autoscaler AUTOSCALER_BIN=/opt/nomad/autoscaler/nomad-autoscaler
 # Instana:  make deploy-autoscaler INSTANA_ENDPOINT=https://<unit>.instana.io INSTANA_TOKEN=<token>
 deploy-autoscaler:
 	sed -e "s|AUTOSCALER_BIN_PLACEHOLDER|$(AUTOSCALER_BIN)|g" \

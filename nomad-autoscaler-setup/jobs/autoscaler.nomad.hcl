@@ -17,7 +17,9 @@ job "autoscaler" {
     }
 
     task "autoscaler" {
-      driver = "exec"
+      # raw_exec: no filesystem isolation — required so the binary staged on the VM
+      # at /opt/nomad/autoscaler/ is accessible without chroot path restrictions.
+      driver = "raw_exec"
 
       config {
         command = "AUTOSCALER_BIN_PLACEHOLDER"

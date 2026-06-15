@@ -47,3 +47,11 @@ plugin "exec" {
     no_pivot_root = true
   }
 }
+
+plugin "raw_exec" {
+  config {
+    # Enabled for the autoscaler job — runs a trusted local binary on client-vm-0
+    # with no filesystem isolation (binary is staged at /opt/nomad/autoscaler/).
+    enabled = true
+  }
+}

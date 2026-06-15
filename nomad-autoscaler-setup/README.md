@@ -1,81 +1,153 @@
 # Nomad Autoscaler Setup with OrbStack
 
-Learn HashiCorp Nomad Autoscaler using OrbStack VMs. Provisions 3 Nomad servers, 3 client nodes, and 1 Prometheus VM using Terraform + Ansible.
+Local learning cluster for Nomad Autoscaler on OrbStack VMs. Provisions a 6-node Nomad+Consul cluster via Terraform + Ansible, then runs APM backends and the autoscaler as Nomad jobs.
+
+## Architecture
+
+```
+Terraform: 3 server VMs + 3 client VMs (Debian ARM64)
+│
+├── Consul  — service discovery on all nodes (*.service.consul DNS)
+├── Nomad   — servers on server-vm-{0,1,2}, clients on client-vm-{0,1,2}
+│
+└── Nomad jobs (deployed after cluster is up):
+    ├── autoscaler      — exec driver, binary from nomad-autoscaler/pkg/linux_arm64/
+    ├── webapp          — nginx, scaled by autoscaler
+    ├── load-balancer   — HAProxy, routes to webapp via Consul
+    ├── prometheus      — Prometheus, scrapes Nomad metrics → prometheus.service.consul:9090
+    ├── influxdb        — InfluxDB 1.8, stores Telegraf metrics → influxdb.service.consul:8086
+    └── telegraf        — system job (1 per client node), pushes host metrics to InfluxDB
+```
+
+## Prerequisites
+
+- macOS with [OrbStack](https://orbstack.dev)
+- `terraform`, `ansible`, `python3`, `nomad` CLI
+- SSH key pair at `~/.ssh/id_ed25519`
 
 ## Quick Start
 
-**Prerequisites:** macOS with OrbStack, Terraform, Python 3, Ansible, SSH key pair
-
-**Setup Cluster:**
 ```bash
+# 1. Provision cluster (creates VMs + configures all nodes)
 make provision
-```
 
-This command runs Terraform to create VMs, generates Ansible inventory, and configures all nodes. Takes ~5-8 minutes.
+# 2. Start the autoscaler
+make deploy-autoscaler
 
-**Verify Cluster:**
-```bash
-orb -m server-vm-0 nomad server members
-orb -m server-vm-0 nomad node status
-```
+# 3. Start an APM backend (choose one)
+make deploy-backend APM=prometheus   # Prometheus + Nomad metrics
+make deploy-backend APM=influxdb     # InfluxDB + Telegraf (host metrics)
 
-**Access UIs:**
-- Nomad: http://localhost:4646/ui/jobs
-- Consul: http://server-vm-0.orb.local:8500/ui (Service discovery & health checks)
-- Prometheus: http://localhost:9090/graph
-- HAProxy Load Balancer Stats: http://client-vm-1.orb.local:1936 (allocated dynamically to client nodes)
+# 4. Deploy the webapp, scaled by the chosen APM
+make deploy-webapp APM=prometheus    # or influxdb
 
-## Test Autoscaling
+# 5. Deploy load balancer
+nomad job run jobs/load-balancer.nomad.hcl
 
-**Deploy jobs:**
-```bash
-nomad job run jobs/autoscaler.nomad.hcl
-nomad job run jobs/webapp-autoscale.nomad.hcl
-nomad job run jobs/load-balancer.nomad.hcl  # Load balancer with service discovery
-```
-
-**Generate load:**
-```bash
-# Access through load balancer (automatically discovers all webapp instances)
+# 6. Run a load test
 make load-test WEBAPP_URL=http://localhost:8080
 ```
 
-**Monitor scaling and service discovery:**
-```bash
-nomad job status webapp
-# Check registered services in Consul
-curl http://server-vm-0.orb.local:8500/v1/catalog/service/webapp | jq .
-```
+## Switching APM at Any Time
 
-**View HAProxy stats:**
-```bash
-# Access HAProxy stats UI (port 1936)
-nomad alloc logs <load-balancer-allocation-id> haproxy
-```
-
-## Clean Up
+The autoscaler loads all APM plugin drivers on startup. Switch the webapp's APM source without restarting the autoscaler:
 
 ```bash
-make destroy
+make deploy-webapp APM=influxdb     # switch to InfluxDB
+make deploy-webapp APM=prometheus   # switch back to Prometheus
 ```
 
----
+Var files in `jobs/apm/` define the source, query, and target for each APM.
 
-**Project file structure?**
+## Custom Autoscaler Binary
+
+By default, `make deploy-autoscaler` uses:
 ```
-nomad-autoscaler-setup-3/
-├── main.tf                      # Terraform config
-├── cloud-init-bootstrap.yaml.tmpl # Minimal SSH + Python bootstrap for all VMs
-├── ansible/                     # VM configuration via Ansible
-│   ├── inventory/               # Dynamic inventory generation
-│   ├── playbooks/               # Ansible playbooks
-│   ├── roles/                   # Ansible roles (base, nomad_server, nomad_client, prometheus)
-│   └── group_vars/              # Variable definitions
-├── jobs/                        # Nomad job files
-└── README.md                    # Quick start guide
+$(HOME)/Desktop/Hashicorp/nomad-autoscaler/pkg/linux_arm64/nomad-autoscaler
 ```
 
----
+Override:
+```bash
+make deploy-autoscaler AUTOSCALER_BIN=/path/to/your/nomad-autoscaler
+```
 
-**For detailed information, troubleshooting, and architecture details, see [question.md](question.md)**
-**For Consul service discovery setup, see [CONSUL_SETUP.md](CONSUL_SETUP.md)**
+Build from source:
+```bash
+cd ~/Desktop/Hashicorp/nomad-autoscaler
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o pkg/linux_arm64/nomad-autoscaler .
+```
+
+## Access UIs
+
+| Service | URL |
+|---|---|
+| Nomad | http://localhost:4646/ui/jobs |
+| Consul | http://server-vm-0.orb.local:8500/ui |
+| HAProxy stats | http://localhost:1936 |
+
+> Use `localhost` in the browser — Chrome blocks `.orb.local`. `.orb.local` works in CLI tools.
+
+## Makefile Reference
+
+| Target | Description |
+|---|---|
+| `make provision` | Full cluster setup (Terraform + inventory + Ansible) |
+| `make deploy-autoscaler` | Deploy the autoscaler job |
+| `make deploy-backend APM=<name>` | Start an APM backend (`prometheus` or `influxdb`) |
+| `make teardown-backend APM=<name>` | Stop and purge an APM backend |
+| `make deploy-webapp APM=<name>` | Deploy webapp with chosen APM source |
+| `make load-test WEBAPP_URL=<url>` | Run HTTP load test via `hey` |
+| `make destroy` | Destroy all VMs |
+
+## Supported APM Plugins
+
+| APM | Backend | Notes |
+|---|---|---|
+| `prometheus` | `jobs/backends/prometheus.nomad.hcl` | Scrapes Nomad telemetry |
+| `influxdb` | `jobs/backends/influxdb.nomad.hcl` + `telegraf.nomad.hcl` | InfluxDB 1.x + Telegraf host metrics |
+| `instana` | External (SaaS or self-hosted) | Uncomment block in `autoscaler.nomad.hcl`, set `endpoint` + `api_token` |
+| `datadog` | External (SaaS) | Uncomment block in `autoscaler.nomad.hcl` |
+
+## Project Structure
+
+```
+nomad-autoscaler-setup/
+├── main.tf                          # Terraform: 3 server + 3 client OrbStack VMs
+├── cloud-init-bootstrap.yaml.tmpl   # Minimal SSH + Python bootstrap
+├── Makefile                         # All operational targets
+├── ansible/
+│   ├── ansible.cfg
+│   ├── group_vars/all.yml           # Shared vars (Consul + Nomad versions)
+│   ├── inventory/
+│   │   ├── generate_inventory.py    # Reads Terraform outputs → hosts.yml
+│   │   └── hosts.yml                # Auto-generated (gitignored)
+│   ├── playbooks/site.yml           # base → consul → nomad_server → nomad_client
+│   └── roles/
+│       ├── base/                    # /etc/hosts + DNS resolver
+│       ├── consul/                  # Consul agent (server + client mode)
+│       ├── nomad_server/            # Nomad server + systemd unit
+│       └── nomad_client/            # Nomad client + Docker + host_volume
+└── jobs/
+    ├── autoscaler.nomad.hcl         # Autoscaler (exec driver, configurable binary)
+    ├── webapp-autoscale.nomad.hcl   # Webapp with variable APM scaling policy
+    ├── load-balancer.nomad.hcl      # HAProxy with Consul template
+    ├── apm/                         # Var files per APM: prometheus | influxdb | instana | datadog
+    └── backends/                    # Backend jobs: prometheus | influxdb | telegraf
+```
+
+## Troubleshooting
+
+```bash
+# Re-generate inventory after VM restart (IPs change every time)
+make inventory && make ansible
+
+# Check cluster health
+orb run -m server-vm-0 nomad server members
+orb run -m server-vm-0 nomad node status
+
+# Follow autoscaler logs
+nomad alloc logs -f $(nomad job allocs -t '{{range .}}{{.ID}}{{end}}' autoscaler)
+
+# Ping all nodes
+ANSIBLE_CONFIG=ansible/ansible.cfg ansible -i ansible/inventory/hosts.yml all -m ping
+```

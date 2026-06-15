@@ -7,6 +7,3 @@
 {% for host in groups['nomad_clients'] | default([]) %}
 {{ hostvars[host].ansible_host }} {{ host }} {{ host }}.orb.local
 {% endfor %}
-{% for host in groups['prometheus'] | default([]) %}
-{{ hostvars[host].ansible_host }} {{ host }} {{ host }}.orb.local
-{% endfor %}

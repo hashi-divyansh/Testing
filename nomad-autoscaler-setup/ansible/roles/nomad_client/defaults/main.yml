@@ -1,4 +1,0 @@
----
-nomad_version: 1.7.3
-nomad_zip_url: "https://releases.hashicorp.com/nomad/1.7.3/nomad_1.7.3_linux_arm64.zip"
-nomad_zip_tmp_path: "/tmp/nomad_1.7.3_linux_arm64.zip"

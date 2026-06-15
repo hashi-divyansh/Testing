@@ -49,7 +49,6 @@ def main() -> int:
 
     servers = get_value(outputs, "server_vm_connections", [])
     clients = get_value(outputs, "client_vm_connections", [])
-    prometheus = get_value(outputs, "prometheus_vm_connection", {})
     ansible_user = os.getenv("ANSIBLE_USER", "root")
     ansible_key = os.getenv("ANSIBLE_PRIVATE_KEY_FILE", "~/.ssh/id_ed25519")
 
@@ -65,9 +64,6 @@ def main() -> int:
                 },
                 "nomad_clients": {
                     "hosts": host_map(clients),
-                },
-                "prometheus": {
-                    "hosts": host_map([prometheus]) if prometheus else {},
                 },
             }
         }

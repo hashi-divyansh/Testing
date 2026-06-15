@@ -1,8 +1,9 @@
 .PHONY: provision terraform-init terraform-apply inventory ansible load-test destroy \
-        deploy-autoscaler deploy-webapp
+        deploy-autoscaler deploy-webapp deploy-backend teardown-backend
 
-HEY_FLAGS ?= -z 5m -c 100 -q 50
-APM       ?= prometheus
+HEY_FLAGS     ?= -z 5m -c 100 -q 50
+APM           ?= prometheus
+AUTOSCALER_BIN ?= $(HOME)/Desktop/Hashicorp/nomad-autoscaler/pkg/linux_arm64/nomad-autoscaler
 
 provision: terraform-init terraform-apply inventory ansible
 
@@ -18,13 +19,38 @@ inventory:
 ansible: inventory
 	ANSIBLE_CONFIG=ansible/ansible.cfg ANSIBLE_ROLES_PATH=ansible/roles ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/site.yml
 
-# Deploy the autoscaler job (exec driver, binary from nomad-autoscaler/pkg/linux_arm64/)
+# Deploy the autoscaler job (exec driver, binary path set by AUTOSCALER_BIN).
+# Override: make deploy-autoscaler AUTOSCALER_BIN=/path/to/nomad-autoscaler
 deploy-autoscaler:
-	nomad job run jobs/autoscaler.nomad.hcl
+	sed "s|AUTOSCALER_BIN_PLACEHOLDER|$(AUTOSCALER_BIN)|g" jobs/autoscaler.nomad.hcl | nomad job run -
 
-# Deploy the webapp with a specific APM plugin.
+# Deploy an APM backend as a Nomad Docker job.
+# Usage: make deploy-backend APM=prometheus
+#        make deploy-backend APM=influxdb
+# Available backends: prometheus | influxdb
+deploy-backend:
+	@if [ ! -f jobs/backends/$(APM).nomad.hcl ]; then \
+		echo "ERROR: No backend job found for APM '$(APM)'. Available:"; \
+		ls jobs/backends/*.nomad.hcl | xargs -n1 basename | sed 's/.nomad.hcl//'; \
+		exit 1; \
+	fi
+	nomad job run jobs/backends/$(APM).nomad.hcl
+	@if [ "$(APM)" = "influxdb" ]; then \
+		echo "Also deploying telegraf (metrics collector for influxdb)..."; \
+		nomad job run jobs/backends/telegraf.nomad.hcl; \
+	fi
+
+# Stop and purge an APM backend.
+# Usage: make teardown-backend APM=prometheus
+teardown-backend:
+	nomad job stop -purge $(APM) 2>/dev/null || true
+	@if [ "$(APM)" = "influxdb" ]; then \
+		nomad job stop -purge telegraf 2>/dev/null || true; \
+	fi
+
+# Deploy the webapp with a specific APM source.
 # Usage: make deploy-webapp APM=influxdb
-# Available: prometheus | influxdb | datadog | instana
+# Available: prometheus | influxdb | instana | datadog
 deploy-webapp:
 	@if [ ! -f jobs/apm/$(APM).nomad.vars ]; then \
 		echo "ERROR: No var file found for APM '$(APM)'. Available:"; \

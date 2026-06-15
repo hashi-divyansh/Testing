@@ -24,19 +24,7 @@
   loop:
     - /etc/nomad.d
     - /opt/nomad/data
-
-- name: Replace OrbStack resolv.conf symlink
-  ansible.builtin.file:
-    path: /etc/resolv.conf
-    state: absent
-
-- name: Configure DNS resolvers
-  ansible.builtin.copy:
-    dest: /etc/resolv.conf
-    mode: "0644"
-    content: |
-      nameserver 1.1.1.1
-      nameserver 8.8.8.8
+    - /opt/nomad/volumes/influxdb
 
 - name: Ensure Docker is enabled and started
   ansible.builtin.systemd:
@@ -76,8 +64,8 @@
   notify: Restart nomad
 
 - name: Deploy Nomad systemd unit
-  ansible.builtin.template:
-    src: nomad.service.j2
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../nomad_server/templates/nomad.service.j2"
     dest: /etc/systemd/system/nomad.service
     mode: "0644"
   notify:

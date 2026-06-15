@@ -43,16 +43,6 @@ resource "orbstack_machine" "server_vm" {
   })
 }
 
-# Create Prometheus monitoring VM (separate for production-like setup)
-resource "orbstack_machine" "prometheus_vm" {
-  name  = "prometheus-vm"
-  image = "debian:bookworm"
-
-  cloud_init = templatefile("${path.module}/cloud-init-bootstrap.yaml.tmpl", {
-    ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
-  })
-}
-
 # Output the client machines
 output "client_machines" {
   value = orbstack_machine.client_vm[*].name
@@ -61,17 +51,6 @@ output "client_machines" {
 # Output server machines
 output "server_machines" {
   value = orbstack_machine.server_vm[*].name
-}
-
-# Output Prometheus VM
-output "prometheus_machine" {
-  value = orbstack_machine.prometheus_vm.name
-}
-
-# Output access URLs
-output "prometheus_url" {
-  value       = "http://prometheus-vm.orb.local:9090"
-  description = "Prometheus Web UI (after VMs boot)"
 }
 
 output "nomad_ui_url" {
@@ -101,12 +80,4 @@ output "server_vm_connections" {
   description = "Server VM SSH connection details for Ansible inventory generation"
 }
 
-output "prometheus_vm_connection" {
-  value = {
-    name     = orbstack_machine.prometheus_vm.name
-    ssh_host = orbstack_machine.prometheus_vm.ssh_host
-    ssh_port = orbstack_machine.prometheus_vm.ssh_port
-  }
-  description = "Prometheus VM SSH connection details for Ansible inventory generation"
-}
 

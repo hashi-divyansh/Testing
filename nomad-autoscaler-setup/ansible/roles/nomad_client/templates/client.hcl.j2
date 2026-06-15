@@ -17,6 +17,11 @@ client {
     retry_max = 30
     retry_interval = "5s"
   }
+
+  host_volume "influxdb-data" {
+    path      = "/opt/nomad/volumes/influxdb"
+    read_only = false
+  }
 }
 
 consul {
@@ -24,5 +29,14 @@ consul {
   auth    = ""
   auto_advertise = true
   checks_use_advertise = true
+}
+
+plugin "docker" {
+  config {
+    allow_privileged = true
+    volumes {
+      enabled = true
+    }
+  }
 }
 

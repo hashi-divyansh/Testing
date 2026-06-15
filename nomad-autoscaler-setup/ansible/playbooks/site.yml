@@ -28,9 +28,3 @@
   become: true
   roles:
     - nomad_client
-
-- name: Configure Prometheus
-  hosts: prometheus
-  become: true
-  roles:
-    - prometheus

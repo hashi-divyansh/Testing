@@ -1,5 +1,0 @@
----
-prometheus_version: 2.50.1
-prometheus_archive_url: "https://github.com/prometheus/prometheus/releases/download/v2.50.1/prometheus-2.50.1.linux-arm64.tar.gz"
-prometheus_archive_tmp_path: "/tmp/prometheus-2.50.1.linux-arm64.tar.gz"
-prometheus_extract_dir: "/tmp/prometheus-2.50.1.linux-arm64"

@@ -19,7 +19,7 @@ inventory:
 	python3 ansible/inventory/generate_inventory.py
 
 ansible: inventory
-	ANSIBLE_CONFIG=ansible/ansible.cfg ANSIBLE_ROLES_PATH=ansible/roles ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/site.yml
+	cd ansible && ANSIBLE_ROLES_PATH=roles ansible-playbook -i inventory/hosts.yml playbooks/site.yml
 
 # Deploy the autoscaler job (exec driver, binary path set by AUTOSCALER_BIN).
 # Override: make deploy-autoscaler AUTOSCALER_BIN=/path/to/nomad-autoscaler

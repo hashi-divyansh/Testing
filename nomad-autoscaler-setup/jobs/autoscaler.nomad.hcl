@@ -24,6 +24,13 @@ job "autoscaler" {
         args    = ["agent", "-config", "${NOMAD_TASK_DIR}/autoscaler.hcl"]
       }
 
+      # Instana credentials — injected at deploy time via `make deploy-autoscaler`.
+      # Leave empty to disable Instana; set both to activate.
+      env {
+        INSTANA_ENDPOINT  = "INSTANA_ENDPOINT_PLACEHOLDER"
+        INSTANA_API_TOKEN = "INSTANA_TOKEN_PLACEHOLDER"
+      }
+
       template {
         data = <<EOH
 nomad {
@@ -53,15 +60,16 @@ apm "influxdb" {
   }
 }
 
-# apm "instana" — uncomment and fill in credentials to enable.
-# api_token can also be set via the INSTANA_API_TOKEN environment variable.
-# apm "instana" {
-#   driver = "instana"
-#   config = {
-#     endpoint  = "https://<unit>.instana.io"
-#     api_token = "<your-api-token>"
-#   }
-# }
+# Instana — rendered only when INSTANA_ENDPOINT env var is non-empty.
+{{ with env "INSTANA_ENDPOINT" -}}
+apm "instana" {
+  driver = "instana"
+  config = {
+    endpoint  = "{{ . }}"
+    api_token = "{{ env "INSTANA_API_TOKEN" }}"
+  }
+}
+{{- end }}
 
 # apm "datadog" — uncomment to enable.
 # apm "datadog" {

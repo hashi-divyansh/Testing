@@ -105,8 +105,29 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o pkg/linux_arm64/nomad-autoscal
 |---|---|---|
 | `prometheus` | `jobs/backends/prometheus.nomad.hcl` | Scrapes Nomad telemetry |
 | `influxdb` | `jobs/backends/influxdb.nomad.hcl` + `telegraf.nomad.hcl` | InfluxDB 1.x + Telegraf host metrics |
-| `instana` | External (SaaS or self-hosted) | Uncomment block in `autoscaler.nomad.hcl`, set `endpoint` + `api_token` |
-| `datadog` | External (SaaS) | Uncomment block in `autoscaler.nomad.hcl` |
+| `instana` | External SaaS / self-hosted | Inject creds at deploy time — see below |
+| `datadog` | External SaaS | Uncomment block in `autoscaler.nomad.hcl` |
+
+### Enabling Instana
+
+No backend job needed — Instana runs externally. Pass credentials at deploy time:
+
+```bash
+# Deploy autoscaler with Instana enabled
+make deploy-autoscaler \
+  INSTANA_ENDPOINT=https://<unit>.instana.io \
+  INSTANA_TOKEN=<your-api-token>
+
+# Then deploy the webapp using the instana var file
+make deploy-webapp APM=instana
+```
+
+The autoscaler config uses a Go template conditional — if `INSTANA_ENDPOINT` is empty (the default), the Instana APM block is not rendered and the plugin is not loaded. Re-deploy with the endpoint set to activate it.
+
+The `jobs/apm/instana.nomad.vars` query format uses Instana's infrastructure metrics API body:
+```hcl
+apm_query = "{\"plugin\":\"host\",\"metrics\":[\"cpu.user\"]}"
+```
 
 ## Project Structure
 
@@ -121,10 +142,10 @@ nomad-autoscaler-setup/
 │   ├── inventory/
 │   │   ├── generate_inventory.py    # Reads Terraform outputs → hosts.yml
 │   │   └── hosts.yml                # Auto-generated (gitignored)
-│   ├── playbooks/site.yml           # base → consul → nomad_server → nomad_client
+│   ├── playbooks/site.yml           # base → consul (all nodes) → nomad_server → nomad_client
 │   └── roles/
-│       ├── base/                    # /etc/hosts + DNS resolver
-│       ├── consul/                  # Consul agent (server + client mode)
+│       ├── base/                    # Common deps + /etc/hosts + DNS resolver
+│       ├── consul/                  # Consul agent (server + client mode via when:)
 │       ├── nomad_server/            # Nomad server + systemd unit
 │       └── nomad_client/            # Nomad client + Docker + host_volume
 └── jobs/

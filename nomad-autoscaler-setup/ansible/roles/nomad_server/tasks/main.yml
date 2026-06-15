@@ -1,13 +1,4 @@
 ---
-- name: Install server dependencies
-  ansible.builtin.apt:
-    name:
-      - wget
-      - unzip
-      - curl
-    state: present
-    update_cache: true
-
 - name: Ensure Nomad directories exist
   ansible.builtin.file:
     path: "{{ item }}"

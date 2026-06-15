@@ -1,4 +1,13 @@
 ---
+- name: Install common dependencies
+  ansible.builtin.apt:
+    name:
+      - wget
+      - unzip
+      - curl
+    state: present
+    update_cache: true
+
 - name: Configure hosts file for OrbStack VM name resolution
   ansible.builtin.template:
     src: hosts.j2

@@ -1,13 +1,4 @@
 ---
-- name: Install Consul dependencies
-  ansible.builtin.apt:
-    name:
-      - wget
-      - unzip
-      - curl
-    state: present
-    update_cache: true
-
 - name: Ensure Consul directories exist
   ansible.builtin.file:
     path: "{{ item }}"

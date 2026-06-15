@@ -4,6 +4,8 @@
 HEY_FLAGS     ?= -z 5m -c 100 -q 50
 APM           ?= prometheus
 AUTOSCALER_BIN ?= $(HOME)/Desktop/Hashicorp/nomad-autoscaler/pkg/linux_arm64/nomad-autoscaler
+INSTANA_ENDPOINT ?=
+INSTANA_TOKEN    ?=
 
 provision: terraform-init terraform-apply inventory ansible
 
@@ -21,8 +23,12 @@ ansible: inventory
 
 # Deploy the autoscaler job (exec driver, binary path set by AUTOSCALER_BIN).
 # Override: make deploy-autoscaler AUTOSCALER_BIN=/path/to/nomad-autoscaler
+# Instana:  make deploy-autoscaler INSTANA_ENDPOINT=https://<unit>.instana.io INSTANA_TOKEN=<token>
 deploy-autoscaler:
-	sed "s|AUTOSCALER_BIN_PLACEHOLDER|$(AUTOSCALER_BIN)|g" jobs/autoscaler.nomad.hcl | nomad job run -
+	sed -e "s|AUTOSCALER_BIN_PLACEHOLDER|$(AUTOSCALER_BIN)|g" \
+	    -e "s|INSTANA_ENDPOINT_PLACEHOLDER|$(INSTANA_ENDPOINT)|g" \
+	    -e "s|INSTANA_TOKEN_PLACEHOLDER|$(INSTANA_TOKEN)|g" \
+	    jobs/autoscaler.nomad.hcl | nomad job run -
 
 # Deploy an APM backend as a Nomad Docker job.
 # Usage: make deploy-backend APM=prometheus

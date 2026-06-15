@@ -1,13 +1,9 @@
 ---
-- name: Install client dependencies
+- name: Install Docker
   ansible.builtin.apt:
-    name:
-      - wget
-      - unzip
-      - curl
-      - docker.io
+    name: docker.io
     state: present
-    update_cache: true
+    update_cache: false
 
 - name: Ensure nomad user exists
   ansible.builtin.user:

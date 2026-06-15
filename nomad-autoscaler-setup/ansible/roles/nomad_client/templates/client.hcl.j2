@@ -40,3 +40,10 @@ plugin "docker" {
   }
 }
 
+plugin "exec" {
+  config {
+    # Allow binaries on the host filesystem (e.g. macOS paths mounted into
+    # OrbStack VMs) to be used as exec driver commands without chroot restriction.
+    no_pivot_root = true
+  }
+}
